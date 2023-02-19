@@ -1,6 +1,8 @@
 import uvicorn
 import shutil
 from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import JSONResponse
+
 
 from typing import List
 
@@ -8,22 +10,13 @@ from typing import List
 from ml import get_model, preprocess_image
 from worker import working
 
+import numpy as np
 
 # init app
 app = FastAPI(debug=True)
 
 # init model
 MODEL = get_model()
-
-@app.get("/")
-async def root():
-    return {
-        "Get prediction from uploaded file": "/image",
-        "Get statistics of previous predictions": "/statistics",
-        "Get an architecture of a model": "/about",
-        "Post an image and a label answer for checking correctness of the model": "/check",
-        "Get a history of previous uploaded images and results": "/history"
-        }
 
 
 @app.post("/image")
@@ -33,10 +26,6 @@ async def upload_image(files: List[UploadFile] = File(...)):
              shutil.copyfileobj(img.file, buffer)
 
     return {"reply": "Good"}
-
-@app.post("/uploadfiles")
-async def upload_files(files: List[UploadFile]):
-    return {"fs": [file.filename for file in files]}
 
 @app.post("/predict")
 async def predict(files: List[UploadFile]):
@@ -65,6 +54,20 @@ async def predict(files: List[UploadFile]):
         result[f"{files[i].filename}"] = "This Railway track has a fault"
         if classes[i][0][0] > 0.5: result[f"{files[i].filename}"] = "This Railway track does not have a fault"
     return result
+
+@app.get("/about")
+async def about():
+
+    stringlist = []
+    MODEL.summary(print_fn=lambda x: stringlist.append(x))
+    short_model_summary = "\n".join(stringlist)
+
+    d = {
+        "summary": short_model_summary,
+        "weights": np.array(MODEL.get_weights()).shape
+    }
+
+    return JSONResponse(content=d) 
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
